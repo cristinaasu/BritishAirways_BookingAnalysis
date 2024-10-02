@@ -1,259 +1,198 @@
 ---
-title: "My title"
-subtitle: "My subtitle if needed"
-author: 
-  - First author
-  - Another author
-thanks: "Code and data are available at: [https://github.com/RohanAlexander/starter_folder](https://github.com/RohanAlexander/starter_folder)."
+title: "Stronger Enforcement on Speeding: Analyzing Traffic Violations in Toronto"
+author: Cristina Su Lam
+thanks: "Code and data supporting this analysis is available at: https://github.com/cristinaasu/BritishAirways_BookingAnalysis"
 date: today
 date-format: long
-abstract: "First sentence. Second sentence. Third sentence. Fourth sentence."
-format: pdf
+toc: true
+fig_caption: yes
 number-sections: true
 bibliography: references.bib
+format: pdf
 ---
-
-```{r}
-#| include: false
-#| warning: false
-#| message: false
-
-library(tidyverse)
-library(palmerpenguins)
+```{r, warning=FALSE, message=FALSE}
+library(knitr)
+library(kableExtra)
 ```
-
 
 # Introduction
 
-Overview paragraph
+The global aviation industry operates within a dynamic environment, necessitating a comprehensive understanding of the factors that influence booking completion rates among travelers. Hence our goal is to equip industry stakeholders with invaluable insights to inform strategic marketing initiatives and tailor offerings to meet customer expectations. This study focuses on travelers originating from Malaysia who consider British Airways as their preferred airline, presenting a unique opportunity to explore the intricacies of customer behavior within this specific context.
 
-Estimand paragraph
+Previous research has highlighted the impact of factors like length of stay and flight duration on successful ticket bookings.1 Notably, a substantial proportion of tickets are booked for short flights, with just a one-day duration of stay at the destination.1 Additionally, individual studies have examined variables such as sales channel2, preference of in-flight meals3, and seat choices3, shedding light on their respective influences on booking completion. However, despite larger-scale investigations addressing the relationship between customer behavior and booking completion, research specific to the Malaysian context remains limited. Therefore, this study endeavors to fill this gap by incorporating all mentioned variables into a logistic regression model, with a particular emphasis on the local market.
 
-Results paragraph
+# Methods
 
-Why it matters paragraph
+The research utilizes a Kaggle dataset containing 50,000 observations of flight booking data from British Airways. We narrow our focus to 7,174 observations of travelers originating from Malaysia, ensuring a more targeted analysis. This dataset has 12 predictors, including key variables such as length of stay, flight duration, sales channel, in-flight meals, and seat choices, central to our investigation. To uncover the customer behavior factors influencing the binary outcome booking completion, we employ a Generalized Linear Model's logistic regression framework with a logit link function.
 
-Telegraphing paragraph: The remainder of this paper is structured as follows. @sec-data....
+This statistical analysis begins with constructing a full model incorporating all variables of the dataset. Subsequently, variable selection techniques are applied to identify the most relevant predictors, such as stepwise AIC and BIC. While both methods involve iteratively adding/removing variables to minimize the AIC/BIC, stepwise BIC imposes a stronger penalty for additional parameters. Moreover, the LASSO method is used, penalizing the absolute size of regression coefficients to shrink less important predictors to zero. Model diagnostics are then conducted to assess the quality of each model, involving identifying outliers, influential points using DFBETAS, and assessing multicollinearity with VIF, where a value greater than 5 indicates multicollinearity among predictors. To validate the models, cross-validation is performed to evaluate prediction accuracy using MAE, alongside utilizing ROC curves with AUC value to assess discriminatory ability. These validation techniques ensure the robustness and generalizability of our models for accurate predictions on unseen data.
 
+In the event of detecting outliers and influential points, only outliers will be removed due to their potential to bias parameter estimates. Influential points, although characterized by extreme values on predictor variables, will not be removed as they do not significantly impact the response variable. Following outliers removal, the model selection, diagnostics, and validation processes will be repeated using the cleaned dataset.
 
-
-
-
-
-# Data {#sec-data}
-
-## Overview
-
-We use the statistical programming language R [@citeR].... Our data [@shelter].... Following @tellingstories, we consider...
-
-Overview text
-
-## Measurement
-	
-Some paragraphs about how we go from a phenomena in the world to an entry in the dataset.
-
-## Outcome variables
-
-Add graphs, tables and text. Use sub-sub-headings for each outcome variable or update the subheading to be singular.
-
-
-
-Some of our data is of penguins (@fig-bills), from @palmerpenguins.
-
-```{r}
-#| label: fig-bills
-#| fig-cap: Bills of penguins
-#| echo: false
-
-ggplot(penguins, aes(x = island, fill = species)) +
-  geom_bar(alpha = 0.8) +
-  scale_fill_manual(values = c("darkorange","purple","cyan4"),
-                    guide = "none") +
-  theme_minimal() +
-  facet_wrap(~species, ncol = 1) +
-  coord_flip()
-```
-
-Talk more about it.
-
-And also planes (@fig-planes). (You can change the height and width, but don't worry about doing that until you have finished every other aspect of the paper - Quarto will try to make it look nice and the defaults usually work well once you have enough text.)
-
-```{r}
-#| label: fig-planes
-#| fig-cap: Relationship between wing length and width
-#| echo: false
-#| warning: false
-#| message: false
-
-analysis_data <- read_csv(here::here("data/02-analysis_data/analysis_data.csv"))
-
-analysis_data |> 
-  ggplot(aes(x = width, y = length)) +
-  geom_point(alpha = 0.8) +
-  theme_minimal() +
-  labs(x = "Wing width (mm)",
-       y = "Wing length (mm)")
-```
-
-Talk way more about it. 
-
-## Predictor variables
-
-Add graphs, tables and text.
-
-Use sub-sub-headings for each outcome variable and feel free to combine a few into one if they go together naturally.
-
-
-
-
-
-
-
-
-# Model
-
-The goal of our modelling strategy is twofold. Firstly,...
-
-Here we briefly describe the Bayesian analysis model used to investigate... Background details and diagnostics are included in [Appendix -@sec-model-details].
-
-## Model set-up
-
-Define $y_i$ as the number of seconds that the plane remained aloft. Then $\beta_i$ is the wing width and $\gamma_i$ is the wing length, both measured in millimeters.  
-
-\begin{align} 
-y_i|\mu_i, \sigma &\sim \mbox{Normal}(\mu_i, \sigma) \\
-\mu_i &= \alpha + \beta_i + \gamma_i\\
-\alpha &\sim \mbox{Normal}(0, 2.5) \\
-\beta &\sim \mbox{Normal}(0, 2.5) \\
-\gamma &\sim \mbox{Normal}(0, 2.5) \\
-\sigma &\sim \mbox{Exponential}(1)
-\end{align}
-
-We run the model in R [@citeR] using the `rstanarm` package of @rstanarm. We use the default priors from `rstanarm`.
-
-
-### Model justification
-
-We expect a positive relationship between the size of the wings and time spent aloft. In particular...
-
-We can use maths by including latex between dollar signs, for instance $\theta$.
-
+The primary objective is to identify the best-performing model with a lower MAE for accuracy and higher AUC for discrimination. Additionally, we need to consider the significance of our predictors of interest in the model. Upon selecting the final model, we conduct Exploratory Data Analysis (EDA) using histograms and contingency tables to enhance comprehension of underlying data patterns. Overall, this approach ensures a systematic and rigorous analysis of the association between customer behavior factors and ticket booking completion.
 
 # Results
 
-Our results are summarized in @tbl-modelresults.
+## Model Selection, Diagnostics, Validation
+
+We initiated by fitting the full model, encompassing all the 12 variables from our dataset. Subsequently, we employed the variable selection techniques, LASSO method and stepwise AIC and BIC. Interestingly, the LASSO Method did not identify any variables for inclusion, likely due to the high penalty imposed, resulting in all coefficients being reduced to zero. Consequently, we proceeded with the models generated by stepwise AIC and BIC. Below are the variables selected by each method:
+
+1.  Stepwise AIC: "sales_channel", "length_of stay", "flight_duration", "num_of_passengers", "wants_extra_baggage", "wants_preferred_seat", "wants_in_flight_meals"
+
+2.  Stepwise BIC: "sales_channel", "length_of stay", "flight_duration", "wants_extra_baggage", "wants_preferred_seat", "wants_in_flight_meals"
+
+Based on this, each model underwent thorough diagnostics and validation, which identified different numbers of influential points and outliers. As outlined in the methods section, we repeated the model selection, diagnostics, and validation processes using the cleaned dataset. Specifically, stepwise AIC and BIC procedures were re-ran with each cleaned dataset, yielding the same variables as above. Despite consistent variable selection, slight changes in model diagnostics and validation were observed. This iterative process enabled us to assess the impact of outlier removal on overall model performance, as summarized in Table 1.
 
 ```{r}
+#| label: tbl-comparison
+#| tbl-cap: Comparison between different models
 #| echo: false
-#| eval: true
 #| warning: false
-#| message: false
-
-library(rstanarm)
-
-first_model <-
-  readRDS(file = here::here("models/first_model.rds"))
-```
-
-```{r}
-#| echo: false
-#| eval: true
-#| label: tbl-modelresults
-#| tbl-cap: "Explanatory models of flight time based on wing width and wing length"
-#| warning: false
-
-modelsummary::modelsummary(
-  list(
-    "First model" = first_model
-  ),
-  statistic = "mad",
-  fmt = 2
+#| fig-align: center
+data <- data.frame(
+  Model = c("Stepwise AIC", "Stepwise AIC (cleaned data)", "Stepwise BIC", "Stepwise BIC (cleaned data)"),
+  Outliers = c(13, 8, 12, 7),
+  `Influential Points` = c(1591, 1570, 1351, 1304),
+  MAE = c(0.008, 0.006, 0.008, 0.006),
+  AUC = c(0.61, 0.61, 0.60, 0.61),
+  VIF = c("Predictors < 5", "Predictors < 5", "Predictors < 5", "Predictors < 5"),
+  check.names = FALSE 
 )
+
+kable(data, align = "c", format = "pipe") 
 ```
 
+Drawing from the outcomes presented, the model derived from the Stepwise BIC approach with cleaned data is chosen. This decision is supported by several factors: the Stepwise BIC method penalizes complexity more heavily than AIC, prioritizing model simplicity and avoiding overfitting, which aligns with our research objective of identifying an accurate yet parsimonious model. The slightly lower MAE (Figue 1) suggests better prediction accuracy compared to other models, while maintaining a comparable AUC (Figure 2), indicating the model's ability to discriminate between completed and incomplete bookings. Moreover, all predictors of interest exhibit statistical significance, with p-values\<0.001 (Appendix. Table 1), reinforcing the reliability of the model's predictive ability.
 
+```{r}
+set.seed(1007928566)
+new_lrm.bic <- lrm(booking_complete ~ ., 
+                 data = cleaned_data_bic[, which(colnames(cleaned_data_bic) %in% c(newselect_var_bic, "booking_complete"))], 
+                 x = TRUE, y = TRUE, model = TRUE)
+new_lrm.bic 
 
+nbcross.calib <- calibrate(new_lrm.bic, method = "crossvalidation", B = 10)
+plot(nbcross.calib, las=1, xlab = "Predicted Probability", main = "Figure 1. The Calibration Plot")
+```
+
+```{r}
+# Predicting probabilities using the logistic regression model
+p <- predict(new_lrm.bic, type = "fitted")
+
+# Generating ROC curve
+newroc_bic.logit <- roc(cleaned_data_bic$booking_complete ~ p)
+
+# Extracting True Positive Rate (TPR) and False Positive Rate (FPR)
+TPR <- newroc_bic.logit$sensitivities
+FPR <- 1 - newroc_bic.logit$specificities
+
+# Plotting ROC curve
+plot(FPR, TPR, xlim = c(0,1), ylim = c(0,1), type = 'l', lty = 1, lwd = 2, col = 'red',
+     xlab = "False Positive Rate", ylab = "True Positive Rate", main = "Figue 2. ROC Curve")
+abline(a = 0, b = 1, lty = 2, col = 'blue')  
+text(0.7, 0.4, label = paste("AUC =", round(auc(newroc_bic.logit), 2))) 
+```
+
+During model diagnostics, while influential points and outliers were identified, their prevalence was relatively lower compared to alternative models. For instance, variables such as length of stay exhibited a greater amount of influential points as stays increased, potentially representing special cases such as extended vacations, while flight duration displayed fewer influential points affecting booking completion (Figure 3). Moreover, the VIF\<5 signifies the absence of multicollinearity issues in our chosen model (Appendix. Table 2). These results underscore the enhanced data quality and robustness achieved through some data cleaning procedures.
+
+```{r}
+new_df.bic <- dfbetas(new_bic.logit)
+nn.bic <- nrow(cleaned_data_bic)
+n.beta_cut <- 2 / sqrt(nn.bic)
+influential_points_nbic <- apply(abs(new_df.bic) > n.beta_cut, 1, any)
+
+# Find the index of the predictor variable "length_of_stay"
+predictor_index <- which(names(coef(new_bic.logit)) == "length_of_stay")
+df.bic_predictor <- new_df.bic[, predictor_index]
+
+# Plot dfbeta against "length_of_stay"
+par(family = 'serif')
+plot(cleaned_data_bic$length_of_stay, df.bic_predictor, 
+     xlab='Length of Stay', ylab='dfbeta', 
+     main='Figure 3. DFBETA vs. Length of Stay')
+lines(lowess(cleaned_data_bic$length_of_stay, df.bic_predictor), 
+      lwd=2, col='blue')
+abline(h=0, lty='dotted')
+abline(h=-2/sqrt(nrow(new_df.bic)), lty='dotted')
+abline(h=2/sqrt(nrow(new_df.bic)), lty='dotted')
+```
+```{r}
+# Find the index of the predictor variable "flight_duration"
+predictor_index <- which(names(coef(new_bic.logit)) == "flight_duration")
+df.bic_predictor <- new_df.bic[, predictor_index]
+
+# Plot dfbeta against "flight_duration"
+par(family = 'serif')
+plot(cleaned_data_bic$flight_duration, df.bic_predictor, 
+     xlab='Flight Duration', ylab='dfbeta', 
+     main='DFBETA vs. Flight Duration')
+lines(lowess(cleaned_data_bic$flight_duration, df.bic_predictor), 
+      lwd=2, col='blue')
+abline(h=0, lty='dotted')
+abline(h=-2/sqrt(nrow(df.bic)), lty='dotted')
+abline(h=2/sqrt(nrow(df.bic)), lty='dotted')
+```
+
+## Description of the Data
+
+From our selected model, incorporating variables suggested by stepwise BIC from the cleaned dataset, we extracted significant insights into the distribution of customer behavior factors and their impact on booking completion. Examining the distributions depicted in Figure 4 and Appendix. Table 3, only 2456 bookings were completed, with the majority (2242) being made through the company's online website. A large proportion of passengers opted for extra baggage (1968), a smaller proportion chose preferred seating, and nearly half of the customers preferred to forgo in-flight meals. Surprisingly, the substantial proportion of incomplete bookings underscores the need for further investigation into the factors affecting this response variable, we expect that our model can make a meaningful contribution in this regard.
+
+```{r}
+# Set up 1x2 plotting window
+par(mfrow = c(2, 4))
+
+# Histograms for numerical variables
+hist(cleaned_data_bic$flight_duration,
+     main = "Hist. Flight Duration",
+     xlab = "Flight Duration",
+     col = "orange")
+
+hist(cleaned_data_bic$length_of_stay,
+     main = "Hist. of Length of Stay",
+     xlab = "Length of Stay",
+     col = "orange")
+
+# Bar plots for categorical variables
+barplot(table(cleaned_data_bic$sales_channel),
+        main = "Sales Channel Dist.",
+        col = c("lavender", "lightblue")) 
+
+barplot(table(cleaned_data_bic$wants_extra_baggage),
+        main = "Extra Baggage Dist.",
+        col = c("lavender", "lightblue"))
+
+barplot(table(cleaned_data_bic$wants_preferred_seat),
+        main = "Preferred Seat Dist.",
+        col = c("lavender", "lightblue"))
+
+barplot(table(cleaned_data_bic$wants_in_flight_meals),
+        main = "In-Flight Meals Dist.",
+        col = c("lavender", "lightblue"))
+
+barplot(table(cleaned_data_bic$booking_complete),
+        main = "Booking Complete Dist.",
+        col = c("lavender", "lightblue"))
+```
+
+In conclusion, the Stepwise BIC approach with cleaned data, tailored to represent the general customer base of the company in Malaysia, achieves an optimal balance between predictive accuracy, model simplicity, and robustness. This renders it the preferred choice for examining the core factors influencing booking completion among travelers originating from Malaysia and considering British Airways as their airline of choice.
 
 # Discussion
 
-## First discussion point {#sec-first-point}
+## Final Model Interpretation
 
-If my paper were 10 pages, then should be be at least 2.5 pages. The discussion is a chance to show off what you know and what you learnt from all this. 
+The final model uncovers insightful relationships between customer behavior factors and booking completion. Significantly, the odds of booking completion for customers using the mobile sales channel are 1.54 times lower (e\^0.433 = 1.54) compared to those using the internet sales channel. This suggests potential challenges in the mobile application booking process. Conversely, additional services, such as extra baggage, preferred seating, and in-flight meals, positively impacts booking completion rates (Appendix. Table 1)
 
-## Second discussion point
+Moreover, the statistically significant coefficients underscore the robustness of these relationships, indicating that the observed effects are not due to random variation but reflect genuine associations, and reinforces the reliability of our findings. Overall, the model addresses our research question by elucidating the key determinants impacting booking completion rates, providing actionable insights for industry stakeholders to optimize the booking process and enhance customer satisfaction.
 
-Please don't use these as sub-heading labels - change them to be what your point actually is.
+## Limitations
 
-## Third discussion point
+Acknowledging the stepwise BIC model with a cleaned dataset as our preferred choice for addressing the research question, it's crucial to note several limitations. While the AUC value is acceptable, a higher value closer to 1 would be preferable, improving the model's ability to distinguish class separation. Achieving this optimal value may require adjustments to the model architecture.
 
-## Weaknesses and next steps
+Despite efforts to remove outliers, a significant number of influential points and outliers persist in the dataset, potentially distorting the model's performance and predictions. Addressing them typically requires complex data preprocessing techniques and careful consideration of research's goal.
 
-Weaknesses and next steps should also be included.
+Therefore, while acknowledging these limitations, it's important to interpret the results of the final model cautiously and consider their potential implications for decision-making within the aviation industry. Future research could explore alternative strategies for handling influential points and outliers to enhance the model's predictive accuracy and robustness.
 
-\newpage
-
-\appendix
-
-# Appendix {-}
-
-
-# Additional data details
-
-# Model details {#sec-model-details}
-
-## Posterior predictive check
-
-In @fig-ppcheckandposteriorvsprior-1 we implement a posterior predictive check. This shows...
-
-In @fig-ppcheckandposteriorvsprior-2 we compare the posterior with the prior. This shows... 
-
-```{r}
-#| eval: true
-#| echo: false
-#| message: false
-#| warning: false
-#| label: fig-ppcheckandposteriorvsprior
-#| layout-ncol: 2
-#| fig-cap: "Examining how the model fits, and is affected by, the data"
-#| fig-subcap: ["Posterior prediction check", "Comparing the posterior with the prior"]
-
-pp_check(first_model) +
-  theme_classic() +
-  theme(legend.position = "bottom")
-
-posterior_vs_prior(first_model) +
-  theme_minimal() +
-  scale_color_brewer(palette = "Set1") +
-  theme(legend.position = "bottom") +
-  coord_flip()
-```
-
-## Diagnostics
-
-@fig-stanareyouokay-1 is a trace plot. It shows... This suggests...
-
-@fig-stanareyouokay-2 is a Rhat plot. It shows... This suggests...
-
-```{r}
-#| echo: false
-#| eval: true
-#| message: false
-#| warning: false
-#| label: fig-stanareyouokay
-#| fig-cap: "Checking the convergence of the MCMC algorithm"
-#| fig-subcap: ["Trace plot", "Rhat plot"]
-#| layout-ncol: 2
-
-plot(first_model, "trace")
-
-plot(first_model, "rhat")
-```
-
-
-
-\newpage
-
+# Appendix
 
 # References
-
 
