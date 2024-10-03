@@ -14,15 +14,3 @@ The project utilizes logistic regression models to identify key factors that inf
 - Validation of the selected model
 - Interpretation of the final model
 
-## Why the Project is Useful 💡
-
-Understanding the factors that drive booking completion can help airlines like British Airways optimize their booking processes, improve customer satisfaction, and increase revenue. The insights derived from this study can inform marketing strategies, enhance user experience on booking platforms, and identify areas for improvement in service offerings.
-
-
-```
-
-3. Open the project in RStudio:
-Open and run STA303-Research-Project.Rproj in RStudio.
-
-4. Explore the results:
-The notebook will guide you through the data cleaning, EDA, model selection, diagnostics, validation, and interpretation of results.
