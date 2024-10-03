@@ -18,22 +18,7 @@ The project utilizes logistic regression models to identify key factors that inf
 
 Understanding the factors that drive booking completion can help airlines like British Airways optimize their booking processes, improve customer satisfaction, and increase revenue. The insights derived from this study can inform marketing strategies, enhance user experience on booking platforms, and identify areas for improvement in service offerings.
 
-## How Users Can Get Started with the Project 
 
-To get started with this project:
-
-1. Clone the repository:
-
-```
-git clone https://github.com/cristinaasu/STA303-Research-Project.git
-cd STA303-Research-Project
-```
-
-2. Install the required dependencies:
-Ensure you have R and RStudio installed. You can install the necessary packages by running the following commands in R:
-
-```
-install.packages(c("dplyr", "ggplot2", "caret", "glmnet", "pROC"))
 ```
 
 3. Open the project in RStudio:
