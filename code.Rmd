@@ -1,0 +1,571 @@
+---
+title: "R Code"
+author: "Cristina Su Lam"
+date: "2024-03-09"
+output: pdf_document
+---
+Load packages
+```{r}
+suppressMessages({
+  suppressWarnings({
+    library(knitr)
+    library(gmodels)
+    library(readr)
+    library(magrittr) 
+    library(dplyr)
+    library(tidyr)
+    library(glmnet)
+    library(dtplyr)
+    library(glmnet)
+    library(MASS)
+    library(rms)
+    library(pROC)
+  })
+})
+```
+
+# 1. Read the Dataset & Drop Missing Values
+```{r, warning=FALSE}
+customer_booking <- read_csv("customer_booking.csv")
+ 
+# Rename the category "CircleTrip" to "RoundTrip" in the "trip_type" variable
+customer_booking <- customer_booking %>%
+  mutate(trip_type = ifelse(trip_type == "CircleTrip", "RoundTrip", trip_type))
+
+# Filter the dataset to only include customers from Australia
+customer_booking_malaysia <- customer_booking[customer_booking$booking_origin == "Malaysia", ]
+
+# Remove the column 'booking_origin'
+customer_booking_malaysia <- customer_booking_malaysia[, -which(names(customer_booking_malaysia) == "booking_origin")]
+
+# Save cleaned dataset
+write_csv(customer_booking_malaysia, "data/02-analysis_data/customer_booking_malaysia.csv") 
+
+# Check the first few rows of the dataset
+head(customer_booking_malaysia)
+```
+
+```{r}
+# Check for missing values in the entire data set
+missing_values <- any(is.na(customer_booking_malaysia))
+
+# Print the result
+if (missing_values) {
+  print("The dataset contains missing values.")
+} else {
+  print("The dataset does not contain missing values.")
+}
+```
+
+# 2. Logistic Regression Model (All variables)
+```{r, warning=FALSE}
+# Fit logistic regression model using original data set
+logit_model <- glm(booking_complete ~ sales_channel + trip_type + purchase_lead + length_of_stay + flight_hour +
+                      wants_preferred_seat + num_passengers + flight_day + route + wants_extra_baggage +
+                      wants_in_flight_meals + flight_duration, 
+                    family = binomial(link = logit), 
+                    data = customer_booking_malaysia)
+```
+
+# 3. Model Selection 
+
+Perform stepwise AIC selection
+```{r}
+sel.var.aic <- step(logit_model, trace = 0, k = 2, direction = "both") 
+select_var_aic <- attr(terms(sel.var.aic), "term.labels")   
+select_var_aic
+```
+
+Perform stepwise BIC selection
+```{r}
+sel.var.bic <- step(logit_model, trace = 0, k = log(nrow(customer_booking_malaysia)), direction = "both") 
+select_var_bic <- attr(terms(sel.var.bic), "term.labels")   
+select_var_bic
+```
+
+LASSO Method 
+```{r}
+set.seed(1007928566)
+
+# x contains the predictors and y contains the response variable
+x <- model.matrix(booking_complete ~ ., data = customer_booking_malaysia)[,-1]
+y <- customer_booking_malaysia$booking_complete
+
+# Fit the model 
+fit <- glmnet(x, y, family = "binomial")
+
+# Make predictions for all observations
+predictions <- predict(fit, newx = x, type = "class", s = c(0.05, 0.01))
+
+# Evaluate model performance
+cv.out <- cv.glmnet(x, y, family = "binomial", type.measure = "class", alpha = 1)
+
+# Plot the cross-validation results
+plot(cv.out)
+
+# Get the best lambda value
+best.lambda <- cv.out$lambda.1se
+
+# Get the coefficients at the selected lambda
+co <- coef(cv.out, s = "lambda.1se")
+
+# Threshold for variable selection
+thresh <- 0.00
+
+# Select variables
+inds <- which(abs(co) > thresh)
+variables <- row.names(co)[inds]
+sel.var.lasso <- variables[!(variables %in% '(Intercept)')]
+sel.var.lasso
+```
+
+# 6. Model Diagnostics & Validation
+
+## 6.1.1 Stepwise AIC Model
+
+Fit Logistic Regression Model with AIC selection
+```{r, warning=FALSE}
+aic.logit <- glm(booking_complete ~ sales_channel + length_of_stay + flight_duration + num_passengers + 
+                   wants_extra_baggage + wants_preferred_seat + wants_in_flight_meals, family = binomial(link = logit),
+                 data = customer_booking_malaysia)
+summary(aic.logit)
+```
+
+Checking influential points
+```{r}
+# DFBETAS
+df.aic <- dfbetas(aic.logit)
+n <- nrow(customer_booking_malaysia)
+beta_cut <- 2 / sqrt(n)
+influential_points <- apply(abs(df.aic) > beta_cut, 1, any)
+sum(influential_points)
+```
+
+Checking outliers
+```{r}
+ri.aic <- rstandard(aic.logit)
+outliers_obs <- which(abs(ri.aic) > 2)
+length(outliers_obs)
+```
+
+VIF to check for multicollinearity
+```{r}
+vif(aic.logit)
+```
+
+Cross-Validation and Calibration
+```{r}
+set.seed(1007928566)
+lrm.aic <- lrm(booking_complete ~ ., 
+                 data = customer_booking_malaysia[, which(colnames(customer_booking_malaysia) %in% c(select_var_aic,
+                                                                                                       "booking_complete"))], 
+                 x = TRUE, y = TRUE, model = TRUE)
+lrm.aic 
+
+cross.calib <- calibrate(lrm.aic, method = "crossvalidation", B = 10)
+plot(cross.calib, las=1, xlab = "Predicted Probability")
+```
+
+AUC and ROC Curve
+```{r}
+# Predicting probabilities using the logistic regression model
+p <- predict(lrm.aic, type = "fitted")
+
+# Generating ROC curve
+roc_aic.logit <- roc(customer_booking_malaysia$booking_complete ~ p)
+
+# Extracting True Positive Rate (TPR) and False Positive Rate (FPR)
+TPR <- roc_aic.logit$sensitivities
+FPR <- 1 - roc_aic.logit$specificities
+
+# Plotting ROC curve
+plot(FPR, TPR, xlim = c(0,1), ylim = c(0,1), type = 'l', lty = 1, lwd = 2, col = 'red',
+     xlab = "False Positive Rate", ylab = "True Positive Rate", main = "ROC Curve")
+abline(a = 0, b = 1, lty = 2, col = 'blue')  # Adding diagonal reference line
+text(0.7, 0.4, label = paste("AUC =", round(auc(roc_aic.logit), 2)))  # Adding AUC value as text
+
+# Calculating and printing the AUC
+auc_value <- auc(roc_aic.logit)
+print(paste("AUC value:", round(auc_value, 2)))
+```
+
+## 6.1.2 Stepwise AIC Model (Outliers Removed)
+
+Fit logistic regression with the cleaned dataset (without outliers)
+```{r, warning=FALSE}
+# Combine influential points and outliers without repetition
+all_outliers <- unique(outliers_obs)
+
+# Remove outliers and influential points from the dataset
+cleaned_data_aic <- customer_booking_malaysia[-all_outliers, ]
+
+# Fit logistic regression model with all variables 
+new.logit_model <- glm(booking_complete ~ sales_channel + trip_type + purchase_lead + length_of_stay + flight_hour + wants_preferred_seat + num_passengers + flight_day + route + wants_extra_baggage +
+                      wants_in_flight_meals + flight_duration, 
+                    family = binomial(link = logit), 
+                    data = cleaned_data_aic)
+```
+
+Perform Stepwise AIC selection with 'new.logit_model'
+```{r}
+newsel.var.aic <- step(new.logit_model, trace = 0, k = 2, direction = "both") 
+newselect_var_aic <- attr(terms(newsel.var.aic), "term.labels")   
+newselect_var_aic
+```
+
+Fit Logistic Regression Model with new AIC selection
+```{r, warning=FALSE}
+new_aic.logit <- glm(booking_complete ~ sales_channel + length_of_stay + flight_duration + num_passengers + wants_extra_baggage + wants_preferred_seat + wants_in_flight_meals, family = binomial(link = logit), data = cleaned_data_aic)
+summary(new_aic.logit)
+```
+
+Checking influential points
+```{r}
+# DFBETAS
+new_df.aic <- dfbetas(new_aic.logit)
+n.aic <- nrow(cleaned_data_aic)
+n.beta_cut <- 2 / sqrt(n.aic)
+influential_points_naic <- apply(abs(new_df.aic) > n.beta_cut, 1, any)
+sum(influential_points_naic)
+```
+
+Checking outliers
+```{r}
+ri.naic <- rstandard(new_aic.logit)
+outliers_obs_naic <- which(abs(ri.naic) > 2)
+length(outliers_obs_naic)
+```
+
+VIF to check for multicollinearity
+```{r}
+vif(new_aic.logit)
+```
+
+Cross-Validation and Calibration
+```{r}
+set.seed(1007928566)
+new_lrm.aic <- lrm(booking_complete ~ ., 
+                 data = cleaned_data_aic[, which(colnames(cleaned_data_aic) %in% c(newselect_var_aic,"booking_complete"))], 
+                 x = TRUE, y = TRUE, model = TRUE)
+new_lrm.aic 
+
+nacross.calib <- calibrate(new_lrm.aic, method = "crossvalidation", B = 10)
+plot(nacross.calib, las=1, xlab = "Predicted Probability")
+```
+
+AUC and ROC Curve
+```{r}
+# Predicting probabilities using the logistic regression model
+p <- predict(new_lrm.aic, type = "fitted")
+
+# Generating ROC curve
+newroc_aic.logit <- roc(cleaned_data_aic$booking_complete ~ p)
+
+# Extracting True Positive Rate (TPR) and False Positive Rate (FPR)
+TPR <- newroc_aic.logit$sensitivities
+FPR <- 1 - newroc_aic.logit$specificities
+
+# Plotting ROC curve
+plot(FPR, TPR, xlim = c(0,1), ylim = c(0,1), type = 'l', lty = 1, lwd = 2, col = 'red',
+     xlab = "False Positive Rate", ylab = "True Positive Rate", main = "ROC Curve")
+abline(a = 0, b = 1, lty = 2, col = 'blue')  # Adding diagonal reference line
+text(0.7, 0.4, label = paste("AUC =", round(auc(newroc_aic.logit), 2)))  # Adding AUC value as text
+
+# Calculating and printing the AUC
+newauc_value <- auc(newroc_aic.logit)
+print(paste("AUC value:", round(newauc_value, 2)))
+```
+
+## 6.2.1 Stepwise BIC Model
+
+Fit Logistic Regression Model with BIC selection
+```{r, warning=FALSE}
+bic.logit <- glm(booking_complete ~ sales_channel + length_of_stay + flight_duration + wants_extra_baggage + wants_preferred_seat + wants_in_flight_meals, family = binomial(link = logit), data = customer_booking_malaysia)
+summary(bic.logit)
+```
+
+Checking influential points
+```{r}
+df.bic <- dfbetas(bic.logit)
+n.bic <- nrow(customer_booking_malaysia)
+beta_cut_bic <- 2 / sqrt(n.bic)
+influential_points_bic <- apply(abs(df.bic) > beta_cut_bic, 1, any)
+sum(influential_points_bic)
+```
+
+Checking outliers
+```{r}
+ri.bic <- rstandard(bic.logit)
+outliers_obs_bic <- which(ri.bic > 2 | ri.bic < -2)
+length(outliers_obs_bic )
+```
+
+Cross-Validation and Calibration
+```{r}
+lrm.bic <- lrm(booking_complete ~ ., 
+                 data = customer_booking_malaysia[,which(colnames(customer_booking_malaysia) %in% c(select_var_bic, "booking_complete"))], 
+                 x = TRUE, y = TRUE, model = TRUE)
+lrm.aic 
+
+cross.calib <- calibrate(lrm.bic, method = "crossvalidation", B = 10)
+plot(cross.calib, las=1, xlab = "Predicted Probability")
+```
+
+VIF to check for multicollinearity
+```{r}
+vif(bic.logit)
+```
+
+AUC and ROC Curve
+```{r}
+# Predicting probabilities using the logistic regression model
+p <- predict(lrm.bic, type = "fitted")
+
+# Generating ROC curve
+roc_bic.logit <- roc(customer_booking_malaysia$booking_complete ~ p)
+
+# Extracting True Positive Rate (TPR) and False Positive Rate (FPR)
+TPR <- roc_bic.logit$sensitivities
+FPR <- 1 - roc_bic.logit$specificities
+
+# Plotting ROC curve
+plot(FPR, TPR, xlim = c(0,1), ylim = c(0,1), type = 'l', lty = 1, lwd = 2, col = 'red',
+     xlab = "False Positive Rate", ylab = "True Positive Rate", main = "ROC Curve")
+abline(a = 0, b = 1, lty = 2, col = 'blue')  # Adding diagonal reference line
+text(0.7, 0.4, label = paste("AUC =", round(auc(roc_bic.logit), 2)))  # Adding AUC value as text
+
+# Calculating and printing the AUC
+bauc_value <- auc(roc_bic.logit)
+print(paste("AUC value:", round(bauc_value, 2)))
+```
+
+## 6.2.2 Stepwise BIC Model (Outliers removed)
+
+Fit logistic regression with the cleaned dataset (without outliers)
+```{r, warning=FALSE}
+# Combine influential points and outliers without repetition
+all_outliers <- unique(outliers_obs_bic)
+
+# Remove outliers and influential points from the dataset
+cleaned_data_bic <- customer_booking_malaysia[-all_outliers, ]
+
+write_csv(cleaned_data_bic, "data/02-analysis_data/cleaned_data_bic.csv")
+
+# Fit logistic regression model with all variables 
+bnew.logit_model <- glm(booking_complete ~ sales_channel + trip_type + purchase_lead + length_of_stay + flight_hour + wants_preferred_seat + num_passengers + flight_day + route + wants_extra_baggage + wants_in_flight_meals + flight_duration, 
+                    family = binomial(link = logit), 
+                    data = cleaned_data_bic)
+```
+
+Perform Stepwise BIC selection with 'bnew.logit_model'
+```{r}
+newsel.var.bic <- step(bnew.logit_model, trace = 0, k = log(nrow(cleaned_data_bic)), direction = "both") 
+newselect_var_bic <- attr(terms(newsel.var.bic), "term.labels")   
+newselect_var_bic
+```
+
+Fit Logistic Regression Model with new BIC selection
+```{r, warning=FALSE}
+new_bic.logit <- glm(booking_complete ~ sales_channel + length_of_stay + flight_duration + wants_extra_baggage + 
+                   wants_preferred_seat + wants_in_flight_meals, family = binomial(link = logit),
+                 data = cleaned_data_bic)
+summary(new_bic.logit)
+```
+
+Checking influential points
+```{r}
+new_df.bic <- dfbetas(new_bic.logit)
+nn.bic <- nrow(cleaned_data_bic)
+n.beta_cut <- 2 / sqrt(nn.bic)
+influential_points_nbic <- apply(abs(new_df.bic) > n.beta_cut, 1, any)
+sum(influential_points_nbic)
+
+par(mfrow = c(1, 2))
+
+# Find the index of the predictor variable "length_of_stay"
+predictor_index <- which(names(coef(new_bic.logit)) == "length_of_stay")
+df.bic_predictor <- new_df.bic[, predictor_index]
+
+# Plot dfbeta against "length_of_stay"
+par(family = 'serif')
+plot(cleaned_data_bic$length_of_stay, df.bic_predictor, 
+     xlab='Length of Stay', ylab='dfbeta', 
+     main='Figure 3. DFBETA vs. Length of Stay')
+lines(lowess(cleaned_data_bic$length_of_stay, df.bic_predictor), 
+      lwd=2, col='blue')
+abline(h=0, lty='dotted')
+abline(h=-2/sqrt(nrow(new_df.bic)), lty='dotted')
+abline(h=2/sqrt(nrow(new_df.bic)), lty='dotted')
+
+
+# Find the index of the predictor variable "flight_duration"
+predictor_index <- which(names(coef(new_bic.logit)) == "flight_duration")
+df.bic_predictor <- new_df.bic[, predictor_index]
+
+# Plot dfbeta against "flight_duration"
+par(family = 'serif')
+plot(cleaned_data_bic$flight_duration, df.bic_predictor, 
+     xlab='Flight Duration', ylab='dfbeta', 
+     main='DFBETA vs. Flight Duration')
+lines(lowess(cleaned_data_bic$flight_duration, df.bic_predictor), 
+      lwd=2, col='blue')
+abline(h=0, lty='dotted')
+abline(h=-2/sqrt(nrow(df.bic)), lty='dotted')
+abline(h=2/sqrt(nrow(df.bic)), lty='dotted')
+
+```
+
+Checking outliers
+```{r}
+ri.nbic <- rstandard(new_bic.logit)
+outliers_obs_nbic <- which(ri.nbic > 2 | ri.nbic < -2)
+outliers_obs_nbic
+```
+
+VIF to check for multicollinearity
+```{r}
+vif(new_bic.logit)
+```
+
+Cross-Validation and Calibration
+```{r}
+set.seed(1007928566)
+new_lrm.bic <- lrm(booking_complete ~ ., 
+                 data = cleaned_data_bic[, which(colnames(cleaned_data_bic) %in% c(newselect_var_bic, "booking_complete"))], 
+                 x = TRUE, y = TRUE, model = TRUE)
+new_lrm.bic 
+
+nbcross.calib <- calibrate(new_lrm.bic, method = "crossvalidation", B = 10)
+plot(nbcross.calib, las=1, xlab = "Predicted Probability", main = "Figure 1. The Calibration Plot")
+```
+
+AUC and ROC Curve
+```{r}
+# Predicting probabilities using the logistic regression model
+p <- predict(new_lrm.bic, type = "fitted")
+
+# Generating ROC curve
+newroc_bic.logit <- roc(cleaned_data_bic$booking_complete ~ p)
+
+# Extracting True Positive Rate (TPR) and False Positive Rate (FPR)
+TPR <- newroc_bic.logit$sensitivities
+FPR <- 1 - newroc_bic.logit$specificities
+
+# Plotting ROC curve
+plot(FPR, TPR, xlim = c(0,1), ylim = c(0,1), type = 'l', lty = 1, lwd = 2, col = 'red',
+     xlab = "False Positive Rate", ylab = "True Positive Rate", main = "Figue 2. ROC Curve")
+abline(a = 0, b = 1, lty = 2, col = 'blue')  # Adding diagonal reference line
+text(0.7, 0.4, label = paste("AUC =", round(auc(newroc_bic.logit), 2)))  # Adding AUC value as text
+
+# Calculating and printing the AUC
+nbauc_value <- auc(newroc_bic.logit)
+print(paste("AUC value:", round(nbauc_value, 2)))
+```
+
+# Exploratory Data Analysis of Stepwise BIC with cleaned dataset (Chosen Model)
+```{r}
+# Set up 1x2 plotting window
+par(mfrow = c(2, 4))
+
+# Histograms for numerical variables
+hist(cleaned_data_bic$flight_duration,
+     main = "Hist. Flight Duration",
+     xlab = "Flight Duration",
+     col = "orange")
+
+hist(cleaned_data_bic$length_of_stay,
+     main = "Hist. of Length of Stay",
+     xlab = "Length of Stay",
+     col = "orange")
+
+# Bar plots for categorical variables
+barplot(table(cleaned_data_bic$sales_channel),
+        main = "Sales Channel Dist.",
+        col = c("lavender", "lightblue")) 
+
+barplot(table(cleaned_data_bic$wants_extra_baggage),
+        main = "Extra Baggage Dist.",
+        col = c("lavender", "lightblue"))
+
+barplot(table(cleaned_data_bic$wants_preferred_seat),
+        main = "Preferred Seat Dist.",
+        col = c("lavender", "lightblue"))
+
+barplot(table(cleaned_data_bic$wants_in_flight_meals),
+        main = "In-Flight Meals Dist.",
+        col = c("lavender", "lightblue"))
+
+barplot(table(cleaned_data_bic$booking_complete),
+        main = "Booking Complete Dist.",
+        col = c("lavender", "lightblue"))
+```
+
+```{r}
+# Create the contingency table for categorical variable (sales_channel)
+bivariate_table <- table(cleaned_data_bic$sales_channel, cleaned_data_bic$booking_complete)
+
+# Add margins (totals) to the table
+bivariate_table_with_margins <- addmargins(bivariate_table)
+
+# Rename the last column to "Total"
+colnames(bivariate_table_with_margins)[ncol(bivariate_table_with_margins)] <- "Total"
+
+# Rename the last row to "Total"
+rownames(bivariate_table_with_margins)[nrow(bivariate_table_with_margins)] <- "Total"
+
+# Print the table with renamed margins
+print(bivariate_table_with_margins)
+```
+
+```{r}
+# Create the contingency table for categorical variables (wants_extra_baggage)
+bivariate_table <- table(cleaned_data_bic$wants_extra_baggage, cleaned_data_bic$booking_complete)
+
+# Add margins (totals) to the table
+bivariate_table_with_margins <- addmargins(bivariate_table)
+
+# Rename the last column to "Total"
+colnames(bivariate_table_with_margins)[ncol(bivariate_table_with_margins)] <- "Total"
+
+# Rename the last row to "Total"
+rownames(bivariate_table_with_margins)[nrow(bivariate_table_with_margins)] <- "Total"
+
+# Print the table with renamed margins
+print(bivariate_table_with_margins)
+```
+
+```{r}
+# Create the contingency table for categorical variables (wants_preferred_seat)
+bivariate_table <- table(cleaned_data_bic$wants_preferred_seat, cleaned_data_bic$booking_complete)
+
+# Add margins (totals) to the table
+bivariate_table_with_margins <- addmargins(bivariate_table)
+
+# Rename the last column to "Total"
+colnames(bivariate_table_with_margins)[ncol(bivariate_table_with_margins)] <- "Total"
+
+# Rename the last row to "Total"
+rownames(bivariate_table_with_margins)[nrow(bivariate_table_with_margins)] <- "Total"
+
+# Print the table with renamed margins
+print(bivariate_table_with_margins)
+```
+
+```{r}
+# Create the contingency table for categorical variables (wants_in_flight_meals)
+bivariate_table <- table(cleaned_data_bic$wants_in_flight_meals, cleaned_data_bic$booking_complete)
+
+# Add margins (totals) to the table
+bivariate_table_with_margins <- addmargins(bivariate_table)
+
+# Rename the last column to "Total"
+colnames(bivariate_table_with_margins)[ncol(bivariate_table_with_margins)] <- "Total"
+
+# Rename the last row to "Total"
+rownames(bivariate_table_with_margins)[nrow(bivariate_table_with_margins)] <- "Total"
+
+# Print the table with renamed margins
+print(bivariate_table_with_margins)
+```
+
+

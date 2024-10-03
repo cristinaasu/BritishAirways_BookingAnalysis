@@ -1,5 +1,5 @@
 ---
-title: "Stronger Enforcement on Speeding: Analyzing Traffic Violations in Toronto"
+title: "Predicting Booking Completion: Key Insights from Malaysian Travelers on British Airways"
 author: Cristina Su Lam
 thanks: "Code and data supporting this analysis is available at: https://github.com/cristinaasu/BritishAirways_BookingAnalysis"
 date: today
@@ -10,20 +10,25 @@ number-sections: true
 bibliography: references.bib
 format: pdf
 ---
-```{r, warning=FALSE, message=FALSE}
+
+```{r, warning=FALSE, echo = FALSE, message=FALSE}
 library(knitr)
 library(kableExtra)
+library(rms)
+library(here)
+library(readr)
+library(pROC)
 ```
 
 # Introduction
 
 The global aviation industry operates within a dynamic environment, necessitating a comprehensive understanding of the factors that influence booking completion rates among travelers. Hence our goal is to equip industry stakeholders with invaluable insights to inform strategic marketing initiatives and tailor offerings to meet customer expectations. This study focuses on travelers originating from Malaysia who consider British Airways as their preferred airline, presenting a unique opportunity to explore the intricacies of customer behavior within this specific context.
 
-Previous research has highlighted the impact of factors like length of stay and flight duration on successful ticket bookings.1 Notably, a substantial proportion of tickets are booked for short flights, with just a one-day duration of stay at the destination.1 Additionally, individual studies have examined variables such as sales channel2, preference of in-flight meals3, and seat choices3, shedding light on their respective influences on booking completion. However, despite larger-scale investigations addressing the relationship between customer behavior and booking completion, research specific to the Malaysian context remains limited. Therefore, this study endeavors to fill this gap by incorporating all mentioned variables into a logistic regression model, with a particular emphasis on the local market.
+Previous research has highlighted the impact of factors like length of stay and flight duration on successful ticket bookings. Notably, a substantial proportion of tickets are booked for short flights, with just a one-day duration of stay at the destination [@eggermond2007consumer]. Additionally, individual studies have examined variables such as sales channel [@mohdsuki2017flight], preference of in-flight meals [@lim2019comparisons], and seat choices [@lim2019comparisons], shedding light on their respective influences on booking completion. However, despite larger-scale investigations addressing the relationship between customer behavior and booking completion, research specific to the Malaysian context remains limited. Therefore, this study endeavors to fill this gap by incorporating all mentioned variables into a logistic regression model, with a particular emphasis on the local market.
 
 # Methods
 
-The research utilizes a Kaggle dataset containing 50,000 observations of flight booking data from British Airways. We narrow our focus to 7,174 observations of travelers originating from Malaysia, ensuring a more targeted analysis. This dataset has 12 predictors, including key variables such as length of stay, flight duration, sales channel, in-flight meals, and seat choices, central to our investigation. To uncover the customer behavior factors influencing the binary outcome booking completion, we employ a Generalized Linear Model's logistic regression framework with a logit link function.
+The research utilizes a Kaggle dataset containing 50,000 observations of flight booking data from British Airways [@bisht2024british]. We narrow our focus to 7,174 observations of travelers originating from Malaysia, ensuring a more targeted analysis. This dataset has 12 predictors, including key variables such as length of stay, flight duration, sales channel, in-flight meals, and seat choices, central to our investigation. To uncover the customer behavior factors influencing the binary outcome booking completion, we employ a Generalized Linear Model's logistic regression framework with a logit link function.
 
 This statistical analysis begins with constructing a full model incorporating all variables of the dataset. Subsequently, variable selection techniques are applied to identify the most relevant predictors, such as stepwise AIC and BIC. While both methods involve iteratively adding/removing variables to minimize the AIC/BIC, stepwise BIC imposes a stronger penalty for additional parameters. Moreover, the LASSO method is used, penalizing the absolute size of regression coefficients to shrink less important predictors to zero. Model diagnostics are then conducted to assess the quality of each model, involving identifying outliers, influential points using DFBETAS, and assessing multicollinearity with VIF, where a value greater than 5 indicates multicollinearity among predictors. To validate the models, cross-validation is performed to evaluate prediction accuracy using MAE, alongside utilizing ROC curves with AUC value to assess discriminatory ability. These validation techniques ensure the robustness and generalizability of our models for accurate predictions on unseen data.
 
@@ -41,14 +46,14 @@ We initiated by fitting the full model, encompassing all the 12 variables from o
 
 2.  Stepwise BIC: "sales_channel", "length_of stay", "flight_duration", "wants_extra_baggage", "wants_preferred_seat", "wants_in_flight_meals"
 
-Based on this, each model underwent thorough diagnostics and validation, which identified different numbers of influential points and outliers. As outlined in the methods section, we repeated the model selection, diagnostics, and validation processes using the cleaned dataset. Specifically, stepwise AIC and BIC procedures were re-ran with each cleaned dataset, yielding the same variables as above. Despite consistent variable selection, slight changes in model diagnostics and validation were observed. This iterative process enabled us to assess the impact of outlier removal on overall model performance, as summarized in Table 1.
+Based on this, each model underwent thorough diagnostics and validation, which identified different numbers of influential points and outliers. As outlined in the methods section, we repeated the model selection, diagnostics, and validation processes using the cleaned dataset. Specifically, stepwise AIC and BIC procedures were re-ran with each cleaned dataset, yielding the same variables as above. Despite consistent variable selection, slight changes in model diagnostics and validation were observed. This iterative process enabled us to assess the impact of outlier removal on overall model performance, as summarized in [@tbl-comparison].
 
 ```{r}
 #| label: tbl-comparison
 #| tbl-cap: Comparison between different models
 #| echo: false
 #| warning: false
-#| fig-align: center
+#| tbl-align: center
 data <- data.frame(
   Model = c("Stepwise AIC", "Stepwise AIC (cleaned data)", "Stepwise BIC", "Stepwise BIC (cleaned data)"),
   Outliers = c(13, 8, 12, 7),
@@ -62,9 +67,27 @@ data <- data.frame(
 kable(data, align = "c", format = "pipe") 
 ```
 
-Drawing from the outcomes presented, the model derived from the Stepwise BIC approach with cleaned data is chosen. This decision is supported by several factors: the Stepwise BIC method penalizes complexity more heavily than AIC, prioritizing model simplicity and avoiding overfitting, which aligns with our research objective of identifying an accurate yet parsimonious model. The slightly lower MAE (Figue 1) suggests better prediction accuracy compared to other models, while maintaining a comparable AUC (Figure 2), indicating the model's ability to discriminate between completed and incomplete bookings. Moreover, all predictors of interest exhibit statistical significance, with p-values\<0.001 (Appendix. Table 1), reinforcing the reliability of the model's predictive ability.
+Drawing from the outcomes presented, the model derived from the Stepwise BIC approach with cleaned data is chosen. This decision is supported by several factors: the Stepwise BIC method penalizes complexity more heavily than AIC, prioritizing model simplicity and avoiding overfitting, which aligns with our research objective of identifying an accurate yet parsimonious model. The slightly lower MAE [@fig-calibration_plot] suggests better prediction accuracy compared to other models, while maintaining a comparable AUC [@fig-roc], indicating the model's ability to discriminate between completed and incomplete bookings. Moreover, as shown in Appendix [@tbl-eda], all predictors of interest exhibit strong statistical significance, with p-values less than 0.001, reinforcing the reliability and predictive power of the model.
 
 ```{r}
+#| label: fig-calibration_plot
+#| fig-cap: The Calibration Plot
+#| echo: false
+#| warning: false
+#| fig-align: center
+cleaned_data_bic <- read_csv(
+  file = here("data/02-analysis_data/cleaned_data_bic.csv"),
+  show_col_types = FALSE
+)
+
+bnew.logit_model <- glm(booking_complete ~ sales_channel + trip_type + purchase_lead + length_of_stay + flight_hour + wants_preferred_seat + num_passengers + flight_day + route + wants_extra_baggage + wants_in_flight_meals + flight_duration, 
+                    family = binomial(link = logit), 
+                    data = cleaned_data_bic)
+
+newsel.var.bic <- step(bnew.logit_model, trace = 0, k = log(nrow(cleaned_data_bic)), direction = "both") 
+newselect_var_bic <- attr(terms(newsel.var.bic), "term.labels")   
+newselect_var_bic
+
 set.seed(1007928566)
 new_lrm.bic <- lrm(booking_complete ~ ., 
                  data = cleaned_data_bic[, which(colnames(cleaned_data_bic) %in% c(newselect_var_bic, "booking_complete"))], 
@@ -72,10 +95,16 @@ new_lrm.bic <- lrm(booking_complete ~ .,
 new_lrm.bic 
 
 nbcross.calib <- calibrate(new_lrm.bic, method = "crossvalidation", B = 10)
-plot(nbcross.calib, las=1, xlab = "Predicted Probability", main = "Figure 1. The Calibration Plot")
+plot(nbcross.calib, las=1, xlab = "Predicted Probability")
 ```
 
 ```{r}
+#| label: fig-roc
+#| fig-cap: ROC Curve
+#| echo: false
+#| warning: false
+#| message: false
+#| fig-align: center
 # Predicting probabilities using the logistic regression model
 p <- predict(new_lrm.bic, type = "fitted")
 
@@ -88,14 +117,23 @@ FPR <- 1 - newroc_bic.logit$specificities
 
 # Plotting ROC curve
 plot(FPR, TPR, xlim = c(0,1), ylim = c(0,1), type = 'l', lty = 1, lwd = 2, col = 'red',
-     xlab = "False Positive Rate", ylab = "True Positive Rate", main = "Figue 2. ROC Curve")
+     xlab = "False Positive Rate", ylab = "True Positive Rate")
 abline(a = 0, b = 1, lty = 2, col = 'blue')  
 text(0.7, 0.4, label = paste("AUC =", round(auc(newroc_bic.logit), 2))) 
 ```
 
-During model diagnostics, while influential points and outliers were identified, their prevalence was relatively lower compared to alternative models. For instance, variables such as length of stay exhibited a greater amount of influential points as stays increased, potentially representing special cases such as extended vacations, while flight duration displayed fewer influential points affecting booking completion (Figure 3). Moreover, the VIF\<5 signifies the absence of multicollinearity issues in our chosen model (Appendix. Table 2). These results underscore the enhanced data quality and robustness achieved through some data cleaning procedures.
+During model diagnostics, although influential points and outliers were identified, their occurrence was less frequent compared to alternative models. In [@fig-length], the length of stay showed an increase in influential points as the duration extended, possibly indicating special cases such as long vacations. In contrast, flight duration in [@fig-flight] exhibited fewer influential points affecting booking completion, suggesting it had less impact on the outcome. Additionally, Appendix [@tbl-vif] shows that all VIF values are under 5, confirming that multicollinearity is not a concern in our model. These results underscore the enhanced data quality and robustness achieved through some data cleaning procedures.
 
 ```{r}
+#| label: fig-length
+#| fig-cap: DFBETA vs. Length of Stay
+#| echo: false
+#| warning: false
+#| fig-align: center
+new_bic.logit <- glm(booking_complete ~ sales_channel + length_of_stay + flight_duration + wants_extra_baggage + 
+                   wants_preferred_seat + wants_in_flight_meals, family = binomial(link = logit),
+                 data = cleaned_data_bic)
+
 new_df.bic <- dfbetas(new_bic.logit)
 nn.bic <- nrow(cleaned_data_bic)
 n.beta_cut <- 2 / sqrt(nn.bic)
@@ -108,15 +146,28 @@ df.bic_predictor <- new_df.bic[, predictor_index]
 # Plot dfbeta against "length_of_stay"
 par(family = 'serif')
 plot(cleaned_data_bic$length_of_stay, df.bic_predictor, 
-     xlab='Length of Stay', ylab='dfbeta', 
-     main='Figure 3. DFBETA vs. Length of Stay')
+     xlab='Length of Stay', ylab='dfbeta')
 lines(lowess(cleaned_data_bic$length_of_stay, df.bic_predictor), 
       lwd=2, col='blue')
 abline(h=0, lty='dotted')
 abline(h=-2/sqrt(nrow(new_df.bic)), lty='dotted')
 abline(h=2/sqrt(nrow(new_df.bic)), lty='dotted')
 ```
+
 ```{r}
+#| label: fig-flight
+#| fig-cap: DFBETA vs. Flight Duration
+#| echo: false
+#| warning: false
+#| fig-align: center
+customer_booking_malaysia <- read_csv(
+  file = here("data/02-analysis_data/customer_booking_malaysia.csv"),
+  show_col_types = FALSE
+)
+
+bic.logit <- glm(booking_complete ~ sales_channel + length_of_stay + flight_duration + wants_extra_baggage + wants_preferred_seat + wants_in_flight_meals, family = binomial(link = logit), data = customer_booking_malaysia)
+
+df.bic <- dfbetas(bic.logit)
 # Find the index of the predictor variable "flight_duration"
 predictor_index <- which(names(coef(new_bic.logit)) == "flight_duration")
 df.bic_predictor <- new_df.bic[, predictor_index]
@@ -124,8 +175,7 @@ df.bic_predictor <- new_df.bic[, predictor_index]
 # Plot dfbeta against "flight_duration"
 par(family = 'serif')
 plot(cleaned_data_bic$flight_duration, df.bic_predictor, 
-     xlab='Flight Duration', ylab='dfbeta', 
-     main='DFBETA vs. Flight Duration')
+     xlab='Flight Duration', ylab='dfbeta')
 lines(lowess(cleaned_data_bic$flight_duration, df.bic_predictor), 
       lwd=2, col='blue')
 abline(h=0, lty='dotted')
@@ -135,9 +185,14 @@ abline(h=2/sqrt(nrow(df.bic)), lty='dotted')
 
 ## Description of the Data
 
-From our selected model, incorporating variables suggested by stepwise BIC from the cleaned dataset, we extracted significant insights into the distribution of customer behavior factors and their impact on booking completion. Examining the distributions depicted in Figure 4 and Appendix. Table 3, only 2456 bookings were completed, with the majority (2242) being made through the company's online website. A large proportion of passengers opted for extra baggage (1968), a smaller proportion chose preferred seating, and nearly half of the customers preferred to forgo in-flight meals. Surprisingly, the substantial proportion of incomplete bookings underscores the need for further investigation into the factors affecting this response variable, we expect that our model can make a meaningful contribution in this regard.
+From our selected model, incorporating variables suggested by stepwise BIC from the cleaned dataset, we extracted significant insights into the distribution of customer behavior factors and their impact on booking completion. Examining the distributions depicted in [@fig-eda] and Appendix. [@tbl-sales] and [@tbl-baggage], only 2456 bookings were completed, with the majority (2242) being made through the company's online website. A large proportion of passengers opted for extra baggage (1968), a smaller proportion chose preferred seating, and nearly half of the customers preferred to forgo in-flight meals. Surprisingly, the substantial proportion of incomplete bookings underscores the need for further investigation into the factors affecting this response variable, we expect that our model can make a meaningful contribution in this regard.
 
 ```{r}
+#| label: fig-eda
+#| fig-cap: Histogram and Bar-plots of Variables
+#| echo: false
+#| warning: false
+#| fig-align: center
 # Set up 1x2 plotting window
 par(mfrow = c(2, 4))
 
@@ -148,7 +203,7 @@ hist(cleaned_data_bic$flight_duration,
      col = "orange")
 
 hist(cleaned_data_bic$length_of_stay,
-     main = "Hist. of Length of Stay",
+     main = "Hist. Length of Stay",
      xlab = "Length of Stay",
      col = "orange")
 
@@ -180,7 +235,7 @@ In conclusion, the Stepwise BIC approach with cleaned data, tailored to represen
 
 ## Final Model Interpretation
 
-The final model uncovers insightful relationships between customer behavior factors and booking completion. Significantly, the odds of booking completion for customers using the mobile sales channel are 1.54 times lower (e\^0.433 = 1.54) compared to those using the internet sales channel. This suggests potential challenges in the mobile application booking process. Conversely, additional services, such as extra baggage, preferred seating, and in-flight meals, positively impacts booking completion rates (Appendix. Table 1)
+The final model uncovers insightful relationships between customer behavior factors and booking completion. Significantly, the odds of booking completion for customers using the mobile sales channel are 1.54 times lower (e\^0.433 = 1.54) compared to those using the internet sales channel. This suggests potential challenges in the mobile application booking process. Conversely, additional services, such as extra baggage, preferred seating, and in-flight meals, positively impacts booking completion rates (Appendix. [@tbl-eda])
 
 Moreover, the statistically significant coefficients underscore the robustness of these relationships, indicating that the observed effects are not due to random variation but reflect genuine associations, and reinforces the reliability of our findings. Overall, the model addresses our research question by elucidating the key determinants impacting booking completion rates, providing actionable insights for industry stakeholders to optimize the booking process and enhance customer satisfaction.
 
@@ -194,5 +249,85 @@ Therefore, while acknowledging these limitations, it's important to interpret th
 
 # Appendix
 
-# References
+```{r}
+#| label: tbl-eda
+#| tbl-cap: Summary Statistics Table for Stepwise BIC Model with Cleaned Dataset
+#| echo: false
+#| warning: false
+#| tbl-align: center
+summary_table <- data.frame(
+  Coefficients = c("Intercept", "Sales Channel/Mobile", "Length of Stay", "Flight Duration", 
+                   "Extra Baggage", "Preferred Seat", "In-flight Meals"),
+  Estimate = c(-0.439, -0.433, -0.009, -0.063, 0.416, 0.206, 0.226),
+  `Std. Error` = c(0.117, 0.086, 0.001, 0.015, 0.064, 0.057, 0.054),
+  `p-value` = c("<0.001", "<0.001", "<0.001", "<0.001", "<0.001", "<0.001", "<0.001"),
+  check.names = FALSE 
+)
 
+kable(summary_table, format = "pipe", align = "c")
+```
+
+```{r}
+#| label: tbl-vif
+#| tbl-cap: VIF values for Stepwise BIC Model with Cleaned Dataset
+#| echo: false
+#| warning: false
+#| tbl-align: center
+vif_table <- data.frame(
+  `Sales Channel` = c(1.010675),
+  `Length of Stay` = c(1.049261),
+  `Flight Duration` = c(1.038505),
+  `Extra Baggage` = c(1.091465),
+  `Preferred Seat` = c(1.134532),
+  `In-flight Meals` = c(1.139290),
+  check.names = FALSE
+)
+
+kable(vif_table, align = "c")
+```
+
+```{r}
+#| label: tbl-sales
+#| tbl-cap: Contingency Table for Sales Channel 
+#| echo: false
+#| warning: false
+#| tbl-align: center
+# Create the contingency table for the categorical variable (sales_channel)
+bivariate_table <- table(cleaned_data_bic$sales_channel, cleaned_data_bic$booking_complete)
+
+# Add margins (totals) to the table
+bivariate_table_with_margins <- addmargins(bivariate_table)
+
+# Rename the last column to "Total"
+colnames(bivariate_table_with_margins)[ncol(bivariate_table_with_margins)] <- "Total"
+
+# Rename the last row to "Total"
+rownames(bivariate_table_with_margins)[nrow(bivariate_table_with_margins)] <- "Total"
+
+# Print the table with knitr and kableExtra for styling
+kable(bivariate_table_with_margins, align = "c") 
+```
+
+```{r} 
+#| label: tbl-baggage
+#| tbl-cap: Contingency Table for Wants Extra Baggage
+#| echo: false
+#| warning: false
+#| tbl-align: center
+# Create the contingency table for the categorical variables (wants_extra_baggage)
+bivariate_table <- table(cleaned_data_bic$wants_extra_baggage, cleaned_data_bic$booking_complete)
+
+# Add margins (totals) to the table
+bivariate_table_with_margins <- addmargins(bivariate_table)
+
+# Rename the last column to "Total"
+colnames(bivariate_table_with_margins)[ncol(bivariate_table_with_margins)] <- "Total"
+
+# Rename the last row to "Total"
+rownames(bivariate_table_with_margins)[nrow(bivariate_table_with_margins)] <- "Total"
+
+# Print the table with knitr and kableExtra for styling
+kable(bivariate_table_with_margins, align = "c")
+```
+
+# References
